@@ -1,0 +1,70 @@
+{
+  "_comment": "itemworks default config. Copied to config/itemworks.json on first run. There is no file watcher: edit, then restart the server. Deleting this file restores these defaults on the next boot. See operations/itemworks-plan.md in the pterodactyl docs for the full rationale.",
+
+  "sweep_interval_ticks": 100,
+
+  "tools": [
+    {
+      "id": "excavator",
+      "match": {
+        "item": "minecraft:netherite_pickaxe",
+        "marker": "excavator"
+      },
+      "lease": {
+        "enabled": true,
+        "hours": 24.0,
+        "notify_on_stamp": true,
+        "notify_on_expire": true
+      },
+      "abilities": {
+        "excavate_offsets": {
+          "enabled": true,
+          "require_sneak": true,
+          "plane": "view",
+          "view_threshold": 0.5,
+          "blocks": ["#minecraft:base_stone_overworld"],
+          "include_block_entities": false
+        }
+      }
+    },
+    {
+      "id": "shovel",
+      "match": {
+        "item": "minecraft:netherite_shovel",
+        "marker": "shovel"
+      },
+      "lease": {
+        "enabled": true,
+        "hours": 24.0,
+        "notify_on_stamp": true,
+        "notify_on_expire": true
+      },
+      "abilities": {
+        "excavate_offsets": {
+          "enabled": true,
+          "require_sneak": true,
+          "plane": "view",
+          "view_threshold": 0.5,
+          "blocks": ["#minecraft:mineable/shovel"],
+          "include_block_entities": false
+        }
+      }
+    }
+  ],
+
+  "_comments": {
+    "sweep_interval_ticks": "Ticks between full inventory sweeps for lease expiry. 100 = 5s. Minimum 20.",
+    "id": "Name used in log lines. Must be unique.",
+    "match.item": "The base item. Both this AND the marker must match, so a player's own netherite tools are never treated as leased and never destroyed.",
+    "match.marker": "Value expected in the stack's minecraft:custom_data under the key \"itemworks\". Set it in the shop's prices.json components; that is what identifies the item.",
+    "lease.hours": "Lease length. Fractional values work, which is the only practical way to test expiry: 0.01 is 36 seconds.",
+    "lease.notify_on_stamp": "Message when the lease starts.",
+    "lease.notify_on_expire": "Message when the tool is destroyed.",
+    "require_sneak": "Ability only fires while the player holds shift.",
+    "plane": "'view' picks the 3x3 from where the player is looking: steeply up or down gives a horizontal ring, level gives a vertical ring in the wall being faced. 'fixed' (the default when this key is absent) uses the offsets list below instead. Neither mode ever leaves its own plane, so the tool stays one block deep.",
+    "view_threshold": "How far off level the player must be looking before 'view' switches to a horizontal ring. This is the sine of the pitch: 0.5 is about 30 degrees. Lower means it takes a steeper look to flatten.",
+    "blocks": "Block tags (#minecraft:...) or single block ids. Tags come from the game, so they track new blocks automatically. A single id is a typo risk, hence the tag.",
+    "include_block_entities": "Whether chests, signs and other block entities can be broken by a wide swing. Off by default; their contents are not ours to redistribute.",
+    "offsets": "Only used when plane is 'fixed'. [dx,dy,dz] triples relative to the block that was broken. This is what gives full shape control: a 3x3x3 tunnel is a config edit, not a rebuild. Do not include [0,0,0]; the origin block is already broken."
+  }
+}
