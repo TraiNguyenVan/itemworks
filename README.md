@@ -135,6 +135,11 @@ count them before shipping a shape. That verbosity is the argument for
 `plane: "view"` on anything that is a ring, and the reason the `dy: 1` bug was
 possible: **an explicit list must be counted, not eyeballed.**
 
+> The `Tunneler` above is a worked example, not live config. The two tools
+> actually deployed on `find` are the Excavator Pickaxe and Excavator Shovel —
+> see `config/itemworks.json` in the server volume, and
+> `/home/yes/pterodactyl/economy/prices.md` for their current prices.
+
 ## Config schema
 
 `config/itemworks.json`, copied from the jar on first run. Deleting it restores
