@@ -146,11 +146,19 @@ public final class ItemworksConfig {
             LOGGER.warn("Tool \"{}\": lease.hours must be positive, using 24.0", id);
             hours = 24.0;
         }
+        // An absent label is normal, not an error: the key is new and existing configs predate it.
+        String remainingLabel = asString(leaseObj.get("remaining_label"));
+        if (remainingLabel == null) {
+            remainingLabel = "Time left: ";
+        }
         ToolDefinition.Lease lease = new ToolDefinition.Lease(
                 asBoolean(leaseObj.get("enabled"), true),
                 hours,
                 asBoolean(leaseObj.get("notify_on_stamp"), true),
-                asBoolean(leaseObj.get("notify_on_expire"), true));
+                asBoolean(leaseObj.get("notify_on_expire"), true),
+                // Default on: a live countdown is the useful behaviour and nobody has to opt in.
+                asBoolean(leaseObj.get("show_remaining"), true),
+                remainingLabel);
 
         Map<String, AbilityConfig> abilities = new LinkedHashMap<>();
         JsonObject abilitiesObj = asObject(obj.get("abilities"));

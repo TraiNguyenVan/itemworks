@@ -14,7 +14,9 @@
         "enabled": true,
         "hours": 24.0,
         "notify_on_stamp": true,
-        "notify_on_expire": true
+        "notify_on_expire": true,
+        "show_remaining": true,
+        "remaining_label": "Time left: "
       },
       "abilities": {
         "excavate_offsets": {
@@ -37,7 +39,9 @@
         "enabled": true,
         "hours": 24.0,
         "notify_on_stamp": true,
-        "notify_on_expire": true
+        "notify_on_expire": true,
+        "show_remaining": true,
+        "remaining_label": "Time left: "
       },
       "abilities": {
         "excavate_offsets": {
@@ -60,6 +64,8 @@
     "lease.hours": "Lease length. Fractional values work, which is the only practical way to test expiry: 0.01 is 36 seconds.",
     "lease.notify_on_stamp": "Message when the lease starts.",
     "lease.notify_on_expire": "Message when the tool is destroyed.",
+    "lease.show_remaining": "Keep a live HH:MM countdown as a lore line on the tool, visible on hover. On by default. The displayed value only changes once a minute, so the 5s lease sweep rewrites the lore at most once a minute per tool and does a string compare the rest of the time.",
+    "lease.remaining_label": "Prefix that marks which lore line the countdown owns, so it can be rewritten in place instead of appended (ItemLore is immutable, and appending would grow the lore to ItemLore.MAX_LINES). Caveat: changing this after tools are in circulation leaves the old line behind and adds a second one, because the mod cannot tell your line from one you wrote.",
     "require_sneak": "Ability only fires while the player holds shift.",
     "plane": "'view' picks the 3x3 from where the player is looking: steeply up or down gives a horizontal ring, level gives a vertical ring in the wall being faced. 'fixed' (the default when this key is absent) uses the offsets list below instead. Neither mode ever leaves its own plane, so the tool stays one block deep.",
     "view_threshold": "How far off level the player must be looking before 'view' switches to a horizontal ring. This is the sine of the pitch: 0.5 is about 30 degrees. Lower means it takes a steeper look to flatten.",

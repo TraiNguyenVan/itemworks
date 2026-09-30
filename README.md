@@ -4,7 +4,7 @@ Server-side Fabric mod for the `find` server. Gives shop-bought tools an
 **excavation ability** and a **time-limited lease**, both described in a config
 file rather than compiled in.
 
-Live as `itemworks-0.1.0+mc26.3.jar` in the `find` mods directory.
+Live as `itemworks-0.1.2+mc26.3.jar` in the `find` mods directory.
 
 ## What it is, and why it exists
 
@@ -265,7 +265,7 @@ the tool instantly stops matching.
 **A stamped tool no longer exactly matches its price entry**, because
 `ItemStack.isSameItemSameComponents` is an exact test. `/worth` and `/sell` then
 fall back to the plain base item at roughly the vanilla rate. That is a money
-sink rather than a faucet — a 12,000 purchase can be cashed out for a vanilla
+sink rather than a faucet — a purchase at the full shop price can be cashed out for a vanilla
 pickaxe and no more. It is a deliberate trade, not a bug to fix.
 
 **Durability floor.** A swing is refused when the tool has 1 durability left,
@@ -308,12 +308,12 @@ Toolchain, which must track the server (`gradle.properties`): `minecraft_version
 `loader_version=0.19.5`, `loom_version=1.18.1`, `fabric_api_version=0.161.0+26.3`,
 and `options.release = 25` in `build.gradle`.
 
-Build result: `build/libs/itemworks-0.1.0+mc26.3.jar` — 31537 bytes, 13 classes,
+Build result: `build/libs/itemworks-0.1.2+mc26.3.jar` — 33161 bytes, 12 classes,
 builds clean in ~12s warm.
 
 ```sh
-sha256sum build/libs/itemworks-0.1.0+mc26.3.jar
-# edbee5f68ad376d03cd810b74f27afd200e2f00a25bb56b6031d5a786968ce1b
+sha256sum build/libs/itemworks-0.1.2+mc26.3.jar
+# f88f1e4e1236d584a86d99566a8dccb0f564dee5abdb7833579c3522d7cf0135
 ```
 
 ### Deploy
@@ -325,8 +325,8 @@ through a container at that uid:
 ```sh
 V=/var/lib/pterodactyl/volumes/536eac8f-ad7d-436f-900e-8f1605962b63
 docker run --rm -i --user 105:107 -v "$V":/v --entrypoint sh ghcr.io/pelican-eggs/yolks:java_25 \
-  -c 'cat > /v/mods/itemworks-0.1.0+mc26.3.jar && sha256sum /v/mods/itemworks-0.1.0+mc26.3.jar' \
-  < /home/yes/projects/itemworks/build/libs/itemworks-0.1.0+mc26.3.jar
+  -c 'cat > /v/mods/itemworks-0.1.2+mc26.3.jar && sha256sum /v/mods/itemworks-0.1.2+mc26.3.jar' \
+  < /home/yes/projects/itemworks/build/libs/itemworks-0.1.2+mc26.3.jar
 ```
 
 - **`-i` is mandatory.** Without it `docker run` does not attach stdin, the

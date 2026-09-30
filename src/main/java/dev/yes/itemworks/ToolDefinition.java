@@ -23,12 +23,16 @@ public record ToolDefinition(
      * @param hours          lease length; values &lt;= 0 are rejected at load
      * @param notifyOnStamp  tell the player when their lease starts
      * @param notifyOnExpire tell the player when their tool is destroyed
+     * @param showRemaining  keep a live {@code HH:MM} countdown in the item's lore
+     * @param remainingLabel prefix that marks which lore line the countdown owns
      */
     public record Lease(
             boolean enabled,
             double hours,
             boolean notifyOnStamp,
-            boolean notifyOnExpire
+            boolean notifyOnExpire,
+            boolean showRemaining,
+            String remainingLabel
     ) {
     }
 

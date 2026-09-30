@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemLore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,7 +37,7 @@ import java.util.Optional;
  * worth knowing: a stamped tool no longer exactly matches its price entry, because
  * {@code ItemStack.isSameItemSameComponents} is an exact test. {@code /worth} and {@code /sell} then
  * fall back to the plain base item, roughly the vanilla rate. That is a money sink rather than a
- * faucet — a 12,000 purchase can be cashed out for a vanilla pickaxe and no more.
+ * faucet — a purchase at the full shop price can be cashed out for a vanilla pickaxe and no more.
  *
  * <p>Both keys are written together, and the marker is re-asserted on every stamp, so a stack cannot
  * lose the marker by going through here.
@@ -47,6 +50,12 @@ public final class LeaseManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("itemworks");
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    /**
+     * At or under this many minutes the countdown is drawn red instead of aqua, so a tool that is about
+     * to vanish is obvious at a glance. Not configurable: it is a legibility threshold, not a policy.
+     */
+    private static final long LOW_TIME_MINUTES = 60;
 
     private static int ticksUntilSweep = 100;
 
@@ -113,6 +122,9 @@ public final class LeaseManager {
         }
 
         if (System.currentTimeMillis() < deadline.get()) {
+            if (lease.showRemaining()) {
+                writeCountdown(stack, lease, deadline.get());
+            }
             return;
         }
 
@@ -124,6 +136,90 @@ public final class LeaseManager {
                     "Your " + label + " lease expired and the tool was destroyed.")
                     .withStyle(ChatFormatting.RED));
         }
+    }
+
+    /**
+     * Keeps a live {@code HH:MM} countdown in the tool's lore, so a player can see how long they have
+     * left without asking.
+     *
+     * <h2>Why the line is rewritten, not appended</h2>
+     *
+     * <p>{@link ItemLore} is an immutable record whose only mutator is {@code withLineAdded}, so a
+     * countdown that appended on every tick would grow the lore until it hit {@code ItemLore.MAX_LINES}
+     * and then silently stop. Instead the line is found by its configured prefix and replaced at the
+     * same index, preserving every other line and its position.
+     *
+     * <p>The prefix is the only thing identifying the line. That is a deliberate trade: it is readable
+     * with {@code /data get entity}, which is how an admin debugs everything else here, in exchange for
+     * the knowledge that renaming {@code remaining_label} orphans the old line and appends a new one.
+     * The old line is never removed automatically, because deciding that a line the admin wrote is
+     * "stale" needs a marker the client can hide, and a marker that survives an anvil rename.
+     *
+     * <p>The sweep runs every {@code sweep_interval_ticks} (5s by default) but the displayed value only
+     * changes once a minute, so the common path is a string compare and no write at all.
+     */
+    private static void writeCountdown(ItemStack stack, ToolDefinition.Lease lease, long deadline) {
+        String label = lease.remainingLabel();
+        if (label == null || label.isBlank()) {
+            return;
+        }
+        // Floor, so a lease never reads as having more time than it has, and never goes negative.
+        long minutes = Math.max(0L, (deadline - System.currentTimeMillis()) / 60_000L);
+        String desired = label + formatRemaining(minutes);
+
+        ItemLore lore = stack.get(DataComponents.LORE);
+        List<Component> lines = lore == null ? List.of() : new ArrayList<>(lore.lines());
+
+        for (int i = 0; i < lines.size(); i++) {
+            String text = lines.get(i).getString();
+            if (!text.startsWith(label)) {
+                continue;
+            }
+            if (desired.equals(text)) {
+                return;
+            }
+            lines.set(i, countdownLine(desired, minutes));
+            stack.set(DataComponents.LORE, new ItemLore(List.copyOf(lines)));
+            return;
+        }
+
+        // No countdown line yet, so this is the first write. A full lore is overwritten at the last
+        // index rather than appended, because appending past MAX_LINES is what we are avoiding.
+        if (lines.size() >= ItemLore.MAX_LINES) {
+            lines.set(lines.size() - 1, countdownLine(desired, minutes));
+        } else {
+            lines.add(countdownLine(desired, minutes));
+        }
+        stack.set(DataComponents.LORE, new ItemLore(List.copyOf(lines)));
+    }
+
+    /**
+     * Renders the remaining lease in words: {@code "21 hours 45 minutes"}.
+     *
+     * <p>Words rather than {@code "21:45"} because a bare colon-separated pair on an item tooltip reads
+     * as a wall clock, and "Time left: 21:45" next to a real clock is genuinely ambiguous. Spelling the
+     * units out removes the reading that matters.
+     *
+     * <p>Zero hours are dropped rather than printed, so a tool with 45 minutes left says "45 minutes" and
+     * not "0 hours 45 minutes", and units are singularised when there is exactly one. A lease always has
+     * at least one minute's worth of text, so the line is never empty.
+     */
+    private static String formatRemaining(long minutes) {
+        long hours = minutes / 60;
+        long rest = minutes % 60;
+        if (hours <= 0) {
+            return rest + (rest == 1 ? " minute" : " minutes");
+        }
+        String text = hours + (hours == 1 ? " hour" : " hours");
+        if (rest > 0) {
+            text += " " + rest + (rest == 1 ? " minute" : " minutes");
+        }
+        return text;
+    }
+
+    private static Component countdownLine(String text, long minutes) {
+        return Component.literal(text)
+                .withStyle(minutes <= LOW_TIME_MINUTES ? ChatFormatting.RED : ChatFormatting.AQUA);
     }
 
     /** Prefers the item's own display name so the message reads the way the shop listed it. */
