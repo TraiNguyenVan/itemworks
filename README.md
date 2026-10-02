@@ -17,8 +17,7 @@ Live as `itemworks-0.1.2+mc26.3.jar` in the `find` mods directory.
    before mining stopped. Two tools with the same enchantment had identical
    behaviour by construction.
 2. **`veinmine-lease`** — a separate mod that stamped a deadline on Veinminer's
-   tools. Its logic is now `LeaseManager` here. The old project directory
-   `/home/yes/projects/veinmine-lease` is retired; do not build or deploy from it.
+   tools. Its logic is now `LeaseManager` here. The old `veinmine-lease` project is retired; do not build or deploy from it.
 
 The governing idea of the rewrite is **behaviour is data**. What a tool does is
 decided by a JSON block an admin can read and edit, and a mistake in that block
@@ -137,8 +136,8 @@ possible: **an explicit list must be counted, not eyeballed.**
 
 > The `Tunneler` above is a worked example, not live config. The two tools
 > actually deployed on `find` are the Excavator Pickaxe and Excavator Shovel —
-> see `config/itemworks.json` in the server volume, and
-> `/home/yes/pterodactyl/economy/prices.md` for their current prices.
+> see `config/itemworks.json` in the server volume, and the live prices in the
+> server's `prices.json`.
 
 ## Config schema
 
@@ -271,71 +270,19 @@ pickaxe and no more. It is a deliberate trade, not a bug to fix.
 **Durability floor.** A swing is refused when the tool has 1 durability left,
 because a 3x3 costs 9 and breaking through would destroy it outright.
 
-## Build and deploy
-
-There is **no working JDK on this host** (`java: not found`). Every build runs in
-the `ghcr.io/pelican-eggs/yolks:java_25` container, which carries a complete
-Temurin 25 at `/opt/java/openjdk`. Do not try to fix the host JDK.
+## Build
 
 ```sh
-cd /home/yes/projects/itemworks
-docker run --rm --user 1000:1000 --network host \
-  -e GRADLE_USER_HOME=/ecg -e JAVA_HOME=/opt/java/openjdk \
-  -v /home/yes/projects/itemworks:/p -v /home/yes/.cache/ec-gradle:/ecg \
-  -w /p --entrypoint sh ghcr.io/pelican-eggs/yolks:java_25 \
-  -c './gradlew build --no-daemon'
+./gradlew build --no-daemon
 ```
 
-`--network host` is required — containers have no outbound TCP otherwise.
-`GRADLE_USER_HOME=/ecg` is the warm cache at `/home/yes/.cache/ec-gradle`; losing
-it means re-downloading the world.
+Requires a JDK 25 toolchain, matching the server. `gradle.properties` pins the
+rest of the toolchain: `minecraft_version=26.3`, `loader_version=0.19.5`,
+`loom_version=1.18.1`, `fabric_api_version=0.161.0+26.3`, and
+`options.release = 25` in `build.gradle`. These must track the server version or
+the mod will not load.
 
-### Pin the Gradle wrapper to 9.7.1
-
-`gradle/wrapper/gradle-wrapper.properties` **must** say `9.7.1`:
-
-```
-distributionUrl=https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip
-```
-
-`9.7.1` is the only version cached in `/home/yes/.cache/ec-gradle`. `9.7.0` is
-**not** cached — only a `.zip.part` — so a project pinning it tries to download a
-distribution that is not there and fails. `shopguard` still pins 9.7.0 and
-therefore still cannot be built; that was one of two failed boots on the 2026-09-30
-deploy. **Pin new projects to 9.7.1.**
-
-Toolchain, which must track the server (`gradle.properties`): `minecraft_version=26.3`,
-`loader_version=0.19.5`, `loom_version=1.18.1`, `fabric_api_version=0.161.0+26.3`,
-and `options.release = 25` in `build.gradle`.
-
-Build result: `build/libs/itemworks-0.1.2+mc26.3.jar` — 33161 bytes, 12 classes,
-builds clean in ~12s warm.
-
-```sh
-sha256sum build/libs/itemworks-0.1.2+mc26.3.jar
-# f88f1e4e1236d584a86d99566a8dccb0f564dee5abdb7833579c3522d7cf0135
-```
-
-### Deploy
-
-The volume is owned by uid/gid **105:107** and is **not writable directly from the
-host** (permission denied, and there is no passwordless sudo). All writes go
-through a container at that uid:
-
-```sh
-V=/var/lib/pterodactyl/volumes/536eac8f-ad7d-436f-900e-8f1605962b63
-docker run --rm -i --user 105:107 -v "$V":/v --entrypoint sh ghcr.io/pelican-eggs/yolks:java_25 \
-  -c 'cat > /v/mods/itemworks-0.1.2+mc26.3.jar && sha256sum /v/mods/itemworks-0.1.2+mc26.3.jar' \
-  < /home/yes/projects/itemworks/build/libs/itemworks-0.1.2+mc26.3.jar
-```
-
-- **`-i` is mandatory.** Without it `docker run` does not attach stdin, the
-  redirect silently produces a **0-byte jar**, and you only find out when the
-  server fails to boot. This caused the other failed boot on 2026-09-30.
-- **Always verify with `sha256sum` on both sides.** Compare the container's output
-  to the local hash above. Do not trust the copy. The 0-byte jar boots to a crash,
-  not a warning.
-- Mods are read at boot only. Restart the server after swapping the jar.
+Build result: `build/libs/itemworks-0.1.2+mc26.3.jar` — 33161 bytes, 12 classes.
 
 ### The `server` entrypoint, not `main`
 
@@ -373,15 +320,4 @@ Also noted, cosmetic: `settings.gradle` still says `rootProject.name =
 from `archives_base_name=itemworks` — but it is misleading. Left alone because
 it is not worth a rebuild.
 
-## Further documentation
 
-This README lives **outside** the pterodactyl docs tree, so those are absolute
-paths on this host, not relative links:
-
-- `/home/yes/pterodactyl/operations/itemworks-plan.md` — the design doc: why this
-  replaced Veinminer, the rejected alternatives, the full test matrix, the
-  `prices.json` migration.
-- `/home/yes/pterodactyl/operations/itemworks-admin.md` — the admin runbook, plus
-  the Minecraft 26.3 console/NBT traps (`mcprobe.py`).
-- `/home/yes/pterodactyl/operations/build-mods.md` — the build and deploy runbook
-  shared by all three custom mods.
