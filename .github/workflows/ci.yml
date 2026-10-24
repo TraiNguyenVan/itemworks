@@ -1,0 +1,184 @@
+name: CI
+
+# One workflow, three triggers:
+#   - PR / push to master -> build the jar, upload it as an artifact
+#   - push of a v* tag    -> build, hash, GitHub Release
+#   - manual (Actions tab, dry_run or real)
+# Tag-push and manual runs share the same steps; the manual run creates the tag itself.
+#
+# Release contract:
+#   - The tag must equal v<mod_version from gradle.properties>, or the run fails.
+#   - A manual run must be dispatched from the default branch (master); a dry run skips
+#     the tag/commit and Release and uploads jars as artifacts instead.
+#   - Release runs are retry-safe: a repeated run after a partial failure reuses the
+#     existing tag and release instead of demanding a re-version.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run - build jars only, no tag or Release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Jar build
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-checks-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build jar
+        run: ./gradlew build --no-daemon
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: jars
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Release
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Tag-push: the tag already exists and must carry the gradle.properties version.
+      # Manual: the version is the source of truth; a real run must come from the default
+      # branch. A tag that already exists at HEAD means a retried release run.
+      - name: Resolve version and tag
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          MOD_VERSION=$(grep -E '^mod_version' gradle.properties | sed -E 's/^mod_version\s*=\s*//' | tr -d '[:space:]')
+          RESUME="false"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DRY="${{ inputs.dry_run }}"
+            if [ "${{ github.ref_name }}" != "master" ] && [ "${DRY}" != "true" ]; then
+              echo "::error::Manual release runs must be dispatched from 'master' (only dry runs may use another branch); you picked '${{ github.ref_name }}'."
+              exit 1
+            fi
+            TAG="v${MOD_VERSION}"
+            # The existing-tag check is release bookkeeping; dry runs promise build-only
+            # and must never be blocked by it.
+            if [ "${DRY}" != "true" ] && git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+              if [ "$(git rev-list -n1 "refs/tags/${TAG}")" != "$(git rev-parse HEAD)" ]; then
+                echo "::error::Tag ${TAG} already exists but points at a different commit; a release can only be retried from the exact commit it tagged. Bump mod_version if this is a new release."
+                exit 1
+              fi
+              RESUME="true"
+            fi
+          else
+            TAG="${GITHUB_REF_NAME}"
+            VER="${TAG#v}"
+            if [ "${VER}" = "${TAG}" ]; then
+              echo "::error::Refusing non-semver tag name: ${TAG}"
+              exit 1
+            fi
+            if [ "${VER}" != "${MOD_VERSION}" ]; then
+              echo "::error::Tag ${TAG} does not match gradle.properties mod_version ${MOD_VERSION}."
+              exit 1
+            fi
+            DRY="false"
+          fi
+
+          {
+            echo "ver=${MOD_VERSION}"
+            echo "tag=${TAG}"
+            echo "dry=${DRY}"
+            echo "resume=${RESUME}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build jar
+        run: ./gradlew build --no-daemon
+
+      - name: Collect jars and checksums
+        run: |
+          set -euo pipefail
+          mkdir release
+          find build/libs -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
+          test "$(find release -name '*.jar' | wc -l)" -ge 1 || { echo "::error::No deployable jar produced."; exit 1; }
+          (cd release && for f in *.jar; do sha256sum -- "$f" > "$f.sha256"; done)
+          ls -la release
+
+      - name: Upload dry-run jars
+        if: steps.resolve.outputs.dry == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jars
+          path: |
+            release/*.jar
+            release/*.sha256
+          if-no-files-found: error
+          retention-days: 7
+        # Dry run ends here; every step below is gated on dry != true.
+
+      - name: Tag (manual run)
+        if: steps.resolve.outputs.dry != 'true' && github.event_name == 'workflow_dispatch' && steps.resolve.outputs.resume != 'true'
+        env:
+          VER: ${{ steps.resolve.outputs.ver }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "itemworks ${VER}"
+          git push origin "refs/tags/${TAG}"
+
+      # On a retry where the release already exists, replace its files.
+      # The existing release title and notes stay unchanged.
+      - name: Create GitHub Release
+        if: steps.resolve.outputs.dry != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.resolve.outputs.ver }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          if gh release create "${TAG}" release/* \
+            --title "itemworks ${VER}" \
+            --generate-notes; then
+            exit 0
+          fi
+          echo "Release ${TAG} already exists; treating it as a resume and updating files."
+          gh release upload "${TAG}" release/* --clobber

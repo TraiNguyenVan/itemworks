@@ -4,7 +4,7 @@ Server-side Fabric mod for the `find` server. Gives shop-bought tools an
 **excavation ability** and a **time-limited lease**, both described in a config
 file rather than compiled in.
 
-Live as `itemworks-0.1.2+mc26.3.jar` in the `find` mods directory.
+Deployed on the production server; the jar's identity is resolved live, not documented here.
 
 ## What it is, and why it exists
 
@@ -282,7 +282,7 @@ rest of the toolchain: `minecraft_version=26.3`, `loader_version=0.19.5`,
 `options.release = 25` in `build.gradle`. These must track the server version or
 the mod will not load.
 
-Build result: `build/libs/itemworks-0.1.2+mc26.3.jar` — 33161 bytes, 12 classes.
+Build result: `build/libs/itemworks-<mod_version>+mc<minecraft_version>.jar`.
 
 ### The `server` entrypoint, not `main`
 
