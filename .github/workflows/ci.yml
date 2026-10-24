@@ -100,7 +100,9 @@ jobs:
               exit 1
             fi
             TAG="v${MOD_VERSION}"
-            if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            # The existing-tag check is release bookkeeping; dry runs promise build-only
+            # and must never be blocked by it.
+            if [ "${DRY}" != "true" ] && git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
               if [ "$(git rev-list -n1 "refs/tags/${TAG}")" != "$(git rev-parse HEAD)" ]; then
                 echo "::error::Tag ${TAG} already exists but points at a different commit; a release can only be retried from the exact commit it tagged. Bump mod_version if this is a new release."
                 exit 1
@@ -164,8 +166,8 @@ jobs:
           git tag -a "${TAG}" -m "itemworks ${VER}"
           git push origin "refs/tags/${TAG}"
 
-      # Idempotent: on a retry where the release already exists, edit its notes and
-      # re-upload the files instead of failing on 'release already exists'.
+      # On a retry where the release already exists, replace its files.
+      # The existing release title and notes stay unchanged.
       - name: Create GitHub Release
         if: steps.resolve.outputs.dry != 'true'
         env:
